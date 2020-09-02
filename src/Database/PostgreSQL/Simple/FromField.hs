@@ -2,6 +2,7 @@
 {-# LANGUAGE FlexibleInstances, TypeSynonymInstances #-}
 {-# LANGUAGE PatternGuards, ScopedTypeVariables      #-}
 {-# LANGUAGE RecordWildCards                         #-}
+{-# LANGUAGE KindSignatures, PolyKinds #-}
 
 {- |
 Module:      Database.PostgreSQL.Simple.FromField
@@ -113,7 +114,7 @@ module Database.PostgreSQL.Simple.FromField
 
 #include "MachDeps.h"
 
-import           Control.Applicative ( (<|>), (<$>), pure, (*>), (<*) )
+import           Control.Applicative ( Const(Const), (<|>), (<$>), pure, (*>), (<*) )
 import           Control.Concurrent.MVar (MVar, newMVar)
 import           Control.Exception (Exception)
 import qualified Data.Aeson as JSON
@@ -122,6 +123,7 @@ import qualified Data.Aeson.Parser as JSON (value')
 import           Data.Attoparsec.ByteString.Char8 hiding (Result)
 import           Data.ByteString (ByteString)
 import qualified Data.ByteString.Char8 as B
+import           Data.Functor.Identity (Identity(Identity))
 import           Data.Int (Int16, Int32, Int64)
 import           Data.IORef (IORef, newIORef)
 import           Data.Ratio (Ratio)
@@ -151,6 +153,11 @@ import           Data.UUID.Types   (UUID)
 import qualified Data.UUID.Types as UUID
 import           Data.Scientific (Scientific)
 import           GHC.Real (infinity, notANumber)
+
+#if MIN_VERSION_base(4,9,0)
+#else
+#define Type *
+#endif
 
 -- | Exception thrown if conversion from a SQL value to a Haskell
 -- value fails.
@@ -266,6 +273,17 @@ instance FromField () where
   fromField f _bs
      | typeOid f /= TI.voidOid = returnError Incompatible f ""
      | otherwise = pure ()
+
+#if MIN_VERSION_base(4,9,0)
+instance (FromField a) => FromField (Const a (b :: k)) where
+  fromField f bs = Const <$> fromField f bs
+#else
+instance (FromField a) => FromField (Const a (b :: Type)) where
+  fromField f bs = Const <$> fromField f bs
+#endif
+
+instance (FromField a) => FromField (Identity a) where
+  fromField f bs = Identity <$> fromField f bs
 
 -- | For dealing with null values.  Compatible with any postgresql type
 --   compatible with type @a@.  Note that the type is not checked if
